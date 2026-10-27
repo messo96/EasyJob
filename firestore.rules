@@ -1,0 +1,393 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'giovannimessina96@gmail.com'
+      );
+    }
+
+    // 1. Validation Blueprint: JobOffer
+    function isValidJobOffer(data) {
+      return data.keys().hasAll([
+        'title', 'company', 'locationName', 'latitude', 'longitude',
+        'salaryRange', 'contractType', 'category', 'description',
+        'requirements', 'recruiterId', 'recruiterName', 'recruiterEmail',
+        'status', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'title', 'company', 'locationName', 'latitude', 'longitude',
+        'salaryRange', 'contractType', 'category', 'description',
+        'requirements', 'recruiterId', 'recruiterName', 'recruiterEmail',
+        'status', 'createdAt', 'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+      data.company is string && data.company.size() >= 2 && data.company.size() <= 100 &&
+      data.locationName is string && data.locationName.size() >= 2 && data.locationName.size() <= 100 &&
+      (data.latitude is int || data.latitude is float) && data.latitude >= -90 && data.latitude <= 90 &&
+      (data.longitude is int || data.longitude is float) && data.longitude >= -180 && data.longitude <= 180 &&
+      data.salaryRange is string && data.salaryRange.size() >= 2 && data.salaryRange.size() <= 80 &&
+      data.contractType is string && data.contractType.size() <= 30 &&
+      data.contractType in ['Full-time', 'Part-time', 'Remoto', 'Ibrido', 'Freelance'] &&
+      data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+      data.description is string && data.description.size() >= 10 && data.description.size() <= 2500 &&
+      data.requirements is string && data.requirements.size() >= 2 && data.requirements.size() <= 1000 &&
+      isValidId(data.recruiterId) &&
+      data.recruiterName is string && data.recruiterName.size() >= 1 && data.recruiterName.size() <= 100 &&
+      data.recruiterEmail is string && data.recruiterEmail.size() >= 3 && data.recruiterEmail.size() <= 150 &&
+      data.status is string && data.status.size() <= 20 && data.status in ['open', 'closed'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // 2. Validation Blueprint: CloudResume (PII-isolated)
+    function isValidCloudResume(data, userId) {
+      return data.keys().hasAll([
+        'userId', 'fullName', 'email', 'phone', 'headline',
+        'summary', 'skills', 'experience', 'education', 'portfolioUrl', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'userId', 'fullName', 'email', 'phone', 'headline',
+        'summary', 'skills', 'experience', 'education', 'portfolioUrl', 'updatedAt'
+      ]) &&
+      isValidId(data.userId) && data.userId == userId && data.userId == request.auth.uid &&
+      data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+      data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 40 &&
+      data.headline is string && data.headline.size() >= 2 && data.headline.size() <= 140 &&
+      data.summary is string && data.summary.size() >= 10 && data.summary.size() <= 2000 &&
+      data.skills is string && data.skills.size() >= 2 && data.skills.size() <= 600 &&
+      data.experience is string && data.experience.size() >= 5 && data.experience.size() <= 2500 &&
+      data.education is string && data.education.size() >= 2 && data.education.size() <= 1000 &&
+      data.portfolioUrl is string && data.portfolioUrl.size() <= 300 &&
+      data.updatedAt is timestamp;
+    }
+
+    // 3. Validation Blueprint: JobApplication
+    function isValidJobApplication(data) {
+      return data.keys().hasAll([
+        'jobId', 'jobTitle', 'company', 'candidateId', 'candidateName',
+        'candidateEmail', 'recruiterId', 'recruiterEmail', 'cvSource',
+        'cvTitle', 'cvContent', 'candidateNotes', 'status',
+        'employerResponse', 'meetLink', 'interviewDate', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'jobId', 'jobTitle', 'company', 'candidateId', 'candidateName',
+        'candidateEmail', 'recruiterId', 'recruiterEmail', 'cvSource',
+        'cvTitle', 'cvContent', 'candidateNotes', 'status',
+        'employerResponse', 'meetLink', 'interviewDate', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.jobId) &&
+      data.jobTitle is string && data.jobTitle.size() >= 2 && data.jobTitle.size() <= 120 &&
+      data.company is string && data.company.size() >= 2 && data.company.size() <= 100 &&
+      isValidId(data.candidateId) &&
+      data.candidateName is string && data.candidateName.size() >= 1 && data.candidateName.size() <= 100 &&
+      data.candidateEmail is string && data.candidateEmail.size() >= 3 && data.candidateEmail.size() <= 150 &&
+      isValidId(data.recruiterId) &&
+      data.recruiterEmail is string && data.recruiterEmail.size() >= 3 && data.recruiterEmail.size() <= 150 &&
+      data.cvSource is string && data.cvSource.size() <= 20 && data.cvSource in ['cloud', 'custom'] &&
+      data.cvTitle is string && data.cvTitle.size() >= 2 && data.cvTitle.size() <= 140 &&
+      data.cvContent is string && data.cvContent.size() >= 10 && data.cvContent.size() <= 4000 &&
+      data.candidateNotes is string && data.candidateNotes.size() <= 1500 &&
+      data.status is string && data.status.size() <= 30 &&
+      data.status in ['in_review', 'interview_scheduled', 'accepted', 'rejected', 'position_closed'] &&
+      data.employerResponse is string && data.employerResponse.size() <= 1500 &&
+      data.meetLink is string && data.meetLink.size() <= 300 &&
+      data.interviewDate is string && data.interviewDate.size() <= 60 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // 4. Validation Blueprint: InterviewFeedback
+    function isValidInterviewFeedback(data) {
+      return data.keys().hasAll([
+        'applicationId', 'jobId', 'jobTitle', 'candidateId', 'candidateName',
+        'recruiterId', 'technicalScore', 'communicationScore', 'cultureFitScore',
+        'overallRating', 'strengths', 'areasForImprovement', 'recommendation',
+        'sharedSummaryForCandidate', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'applicationId', 'jobId', 'jobTitle', 'candidateId', 'candidateName',
+        'recruiterId', 'technicalScore', 'communicationScore', 'cultureFitScore',
+        'overallRating', 'strengths', 'areasForImprovement', 'recommendation',
+        'sharedSummaryForCandidate', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.applicationId) &&
+      isValidId(data.jobId) &&
+      data.jobTitle is string && data.jobTitle.size() >= 2 && data.jobTitle.size() <= 120 &&
+      isValidId(data.candidateId) &&
+      data.candidateName is string && data.candidateName.size() >= 1 && data.candidateName.size() <= 100 &&
+      isValidId(data.recruiterId) &&
+      (data.technicalScore is int || data.technicalScore is float) && data.technicalScore >= 1 && data.technicalScore <= 5 &&
+      (data.communicationScore is int || data.communicationScore is float) && data.communicationScore >= 1 && data.communicationScore <= 5 &&
+      (data.cultureFitScore is int || data.cultureFitScore is float) && data.cultureFitScore >= 1 && data.cultureFitScore <= 5 &&
+      (data.overallRating is int || data.overallRating is float) && data.overallRating >= 1 && data.overallRating <= 5 &&
+      data.strengths is string && data.strengths.size() >= 2 && data.strengths.size() <= 1200 &&
+      data.areasForImprovement is string && data.areasForImprovement.size() >= 2 && data.areasForImprovement.size() <= 1200 &&
+      data.recommendation is string && data.recommendation.size() <= 30 &&
+      data.recommendation in ['strong_hire', 'hire', 'hold', 'no_hire'] &&
+      data.sharedSummaryForCandidate is string && data.sharedSummaryForCandidate.size() >= 2 && data.sharedSummaryForCandidate.size() <= 1200 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // 5. Validation Blueprint: PushNotification
+    function isValidPushNotification(data) {
+      return data.keys().hasAll([
+        'recipientId', 'senderId', 'type', 'title', 'body',
+        'relatedJobId', 'relatedApplicationId', 'isRead', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'recipientId', 'senderId', 'type', 'title', 'body',
+        'relatedJobId', 'relatedApplicationId', 'isRead', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.recipientId) &&
+      isValidId(data.senderId) &&
+      data.type is string && data.type.size() <= 30 &&
+      data.type in ['new_job', 'application_received', 'status_update', 'interview_meet', 'position_closed', 'feedback_shared'] &&
+      data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+      data.body is string && data.body.size() >= 2 && data.body.size() <= 1000 &&
+      data.relatedJobId is string && data.relatedJobId.size() <= 128 &&
+      data.relatedApplicationId is string && data.relatedApplicationId.size() <= 128 &&
+      data.isRead is bool &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Collection: /jobs/{jobId}
+    match /jobs/{jobId} {
+      allow get: if isSignedIn() && isValidId(jobId) && (existing().status in ['open', 'closed'] || existing().recruiterId == request.auth.uid);
+      allow list: if isSignedIn() && (existing().status in ['open', 'closed'] || existing().recruiterId == request.auth.uid);
+
+      allow create: if isVerifiedUser() &&
+        isValidId(jobId) &&
+        isValidJobOffer(incoming()) &&
+        incoming().recruiterId == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(jobId) &&
+        isValidJobOffer(incoming()) &&
+        incoming().recruiterId == existing().recruiterId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().recruiterId == request.auth.uid &&
+            existing().status != 'closed' && (
+              // Action 1: Close job offer (terminal state transition)
+              (incoming().status == 'closed' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+              // Action 2: Edit job details while open
+              (incoming().status == 'open' && incoming().diff(existing()).affectedKeys().hasOnly([
+                'title', 'company', 'locationName', 'latitude', 'longitude',
+                'salaryRange', 'contractType', 'category', 'description',
+                'requirements', 'updatedAt'
+              ]))
+            )
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(jobId) && (existing().recruiterId == request.auth.uid || isAdmin());
+    }
+
+    // Collection: /resumes/{userId} (Strict PII Isolation)
+    match /resumes/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidCloudResume(incoming(), userId) &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidCloudResume(incoming(), userId) &&
+        incoming().userId == existing().userId &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            isOwner(userId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'fullName', 'email', 'phone', 'headline', 'summary',
+              'skills', 'experience', 'education', 'portfolioUrl', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+
+    // Collection: /applications/{applicationId}
+    match /applications/{applicationId} {
+      allow get: if isSignedIn() && isValidId(applicationId) && (
+        existing().candidateId == request.auth.uid ||
+        existing().recruiterId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().candidateId == request.auth.uid ||
+        existing().recruiterId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(applicationId) &&
+        isValidJobApplication(incoming()) &&
+        incoming().candidateId == request.auth.uid &&
+        incoming().status == 'in_review' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/jobs/$(incoming().jobId)) &&
+        get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.status == 'open' &&
+        get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.recruiterId == incoming().recruiterId;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(applicationId) &&
+        isValidJobApplication(incoming()) &&
+        incoming().jobId == existing().jobId &&
+        incoming().candidateId == existing().candidateId &&
+        incoming().recruiterId == existing().recruiterId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            !(existing().status in ['accepted', 'rejected', 'position_closed']) && (
+              // Action 1: Recruiter updates status, mandatory employerResponse, or schedules Meet interview
+              (existing().recruiterId == request.auth.uid &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'status', 'employerResponse', 'meetLink', 'interviewDate', 'updatedAt'
+                ])) ||
+              // Action 2: Candidate updates their own notes while still in_review
+              (existing().candidateId == request.auth.uid &&
+                existing().status == 'in_review' &&
+                incoming().status == 'in_review' &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'candidateNotes', 'cvSource', 'cvTitle', 'cvContent', 'updatedAt'
+                ]))
+            )
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(applicationId) && (
+        existing().candidateId == request.auth.uid || isAdmin()
+      );
+    }
+
+    // Collection: /feedbacks/{feedbackId}
+    match /feedbacks/{feedbackId} {
+      allow get: if isSignedIn() && isValidId(feedbackId) && (
+        existing().recruiterId == request.auth.uid ||
+        existing().candidateId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().recruiterId == request.auth.uid ||
+        existing().candidateId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(feedbackId) &&
+        isValidInterviewFeedback(incoming()) &&
+        incoming().recruiterId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/applications/$(incoming().applicationId)) &&
+        get(/databases/$(database)/documents/applications/$(incoming().applicationId)).data.recruiterId == request.auth.uid;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(feedbackId) &&
+        isValidInterviewFeedback(incoming()) &&
+        incoming().applicationId == existing().applicationId &&
+        incoming().jobId == existing().jobId &&
+        incoming().candidateId == existing().candidateId &&
+        incoming().recruiterId == existing().recruiterId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().recruiterId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'technicalScore', 'communicationScore', 'cultureFitScore',
+              'overallRating', 'strengths', 'areasForImprovement',
+              'recommendation', 'sharedSummaryForCandidate', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(feedbackId) && (
+        existing().recruiterId == request.auth.uid || isAdmin()
+      );
+    }
+
+    // Collection: /notifications/{notificationId}
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && isValidId(notificationId) && (
+        existing().recipientId == request.auth.uid ||
+        existing().senderId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().recipientId == request.auth.uid ||
+        existing().senderId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(notificationId) &&
+        isValidPushNotification(incoming()) &&
+        incoming().senderId == request.auth.uid &&
+        incoming().isRead == false &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(notificationId) &&
+        isValidPushNotification(incoming()) &&
+        incoming().recipientId == existing().recipientId &&
+        incoming().senderId == existing().senderId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().recipientId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(notificationId) && (
+        existing().recipientId == request.auth.uid || isAdmin()
+      );
+    }
+  }
+}

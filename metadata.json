@@ -1,0 +1,6 @@
+{
+  "name": "FindMyJob — Ricerca Lavoro, ATS & Recruiting 1-Click",
+  "description": "Piattaforma di ricerca lavoro con candidatura 1-click, CV Cloud su Firestore, mappa interattiva delle offerte nelle vicinanze, gestionale ATS per recruiter, colloqui Google Meet con invio email automatico, notifiche push e feedback post-colloquio.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

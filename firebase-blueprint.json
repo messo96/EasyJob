@@ -1,0 +1,236 @@
+{
+  "entities": {
+    "JobOffer": {
+      "title": "JobOffer",
+      "description": "Represents a job listing published by an employer or recruiter with geographic coordinates.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "company": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "locationName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "salaryRange": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "contractType": {
+          "type": "string",
+          "enum": ["Full-time", "Part-time", "Remoto", "Ibrido", "Freelance"],
+          "maxLength": 30
+        },
+        "category": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "description": { "type": "string", "minLength": 10, "maxLength": 2500 },
+        "requirements": { "type": "string", "minLength": 2, "maxLength": 1000 },
+        "recruiterId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "recruiterName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "recruiterEmail": { "type": "string", "format": "email", "maxLength": 150 },
+        "status": { "type": "string", "enum": ["open", "closed"], "maxLength": 20 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title",
+        "company",
+        "locationName",
+        "latitude",
+        "longitude",
+        "salaryRange",
+        "contractType",
+        "category",
+        "description",
+        "requirements",
+        "recruiterId",
+        "recruiterName",
+        "recruiterEmail",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CloudResume": {
+      "title": "CloudResume",
+      "description": "Stores a candidate's primary Cloud CV and personal contact details in Firestore.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "phone": { "type": "string", "minLength": 5, "maxLength": 40 },
+        "headline": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "summary": { "type": "string", "minLength": 10, "maxLength": 2000 },
+        "skills": { "type": "string", "minLength": 2, "maxLength": 600 },
+        "experience": { "type": "string", "minLength": 5, "maxLength": 2500 },
+        "education": { "type": "string", "minLength": 2, "maxLength": 1000 },
+        "portfolioUrl": { "type": "string", "minLength": 0, "maxLength": 300 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "fullName",
+        "email",
+        "phone",
+        "headline",
+        "summary",
+        "skills",
+        "experience",
+        "education",
+        "portfolioUrl",
+        "updatedAt"
+      ]
+    },
+    "JobApplication": {
+      "title": "JobApplication",
+      "description": "Tracks a candidate's 1-click application, Cloud or ad-hoc CV, candidate notes, employer mandatory response, and Google Meet link.",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "jobTitle": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "company": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "candidateId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "candidateName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "candidateEmail": { "type": "string", "format": "email", "maxLength": 150 },
+        "recruiterId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "recruiterEmail": { "type": "string", "format": "email", "maxLength": 150 },
+        "cvSource": { "type": "string", "enum": ["cloud", "custom"], "maxLength": 20 },
+        "cvTitle": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "cvContent": { "type": "string", "minLength": 10, "maxLength": 4000 },
+        "candidateNotes": { "type": "string", "minLength": 0, "maxLength": 1500 },
+        "status": {
+          "type": "string",
+          "enum": ["in_review", "interview_scheduled", "accepted", "rejected", "position_closed"],
+          "maxLength": 30
+        },
+        "employerResponse": { "type": "string", "minLength": 0, "maxLength": 1500 },
+        "meetLink": { "type": "string", "minLength": 0, "maxLength": 300 },
+        "interviewDate": { "type": "string", "minLength": 0, "maxLength": 60 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "jobId",
+        "jobTitle",
+        "company",
+        "candidateId",
+        "candidateName",
+        "candidateEmail",
+        "recruiterId",
+        "recruiterEmail",
+        "cvSource",
+        "cvTitle",
+        "cvContent",
+        "candidateNotes",
+        "status",
+        "employerResponse",
+        "meetLink",
+        "interviewDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "InterviewFeedback": {
+      "title": "InterviewFeedback",
+      "description": "Centralized post-interview evaluation scorecard recorded by the recruiter.",
+      "type": "object",
+      "properties": {
+        "applicationId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "jobId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "jobTitle": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "candidateId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "candidateName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "recruiterId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "technicalScore": { "type": "number" },
+        "communicationScore": { "type": "number" },
+        "cultureFitScore": { "type": "number" },
+        "overallRating": { "type": "number" },
+        "strengths": { "type": "string", "minLength": 2, "maxLength": 1200 },
+        "areasForImprovement": { "type": "string", "minLength": 2, "maxLength": 1200 },
+        "recommendation": {
+          "type": "string",
+          "enum": ["strong_hire", "hire", "hold", "no_hire"],
+          "maxLength": 30
+        },
+        "sharedSummaryForCandidate": { "type": "string", "minLength": 2, "maxLength": 1200 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "applicationId",
+        "jobId",
+        "jobTitle",
+        "candidateId",
+        "candidateName",
+        "recruiterId",
+        "technicalScore",
+        "communicationScore",
+        "cultureFitScore",
+        "overallRating",
+        "strengths",
+        "areasForImprovement",
+        "recommendation",
+        "sharedSummaryForCandidate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PushNotification": {
+      "title": "PushNotification",
+      "description": "Personalized push notification alert delivered to a user.",
+      "type": "object",
+      "properties": {
+        "recipientId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "senderId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "type": {
+          "type": "string",
+          "enum": [
+            "new_job",
+            "application_received",
+            "status_update",
+            "interview_meet",
+            "position_closed",
+            "feedback_shared"
+          ],
+          "maxLength": 30
+        },
+        "title": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "body": { "type": "string", "minLength": 2, "maxLength": 1000 },
+        "relatedJobId": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "relatedApplicationId": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "recipientId",
+        "senderId",
+        "type",
+        "title",
+        "body",
+        "relatedJobId",
+        "relatedApplicationId",
+        "isRead",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/JobOffer" },
+      "description": "Publicly browsable job listings managed by their creator recruiter."
+    },
+    "/resumes/{userId}": {
+      "schema": { "$ref": "#/entities/CloudResume" },
+      "description": "PII-isolated Cloud CV documents accessible strictly by the document owner."
+    },
+    "/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/JobApplication" },
+      "description": "Candidate applications accessible only by the candidate who applied or the recruiter who owns the job."
+    },
+    "/feedbacks/{feedbackId}": {
+      "schema": { "$ref": "#/entities/InterviewFeedback" },
+      "description": "Centralized post-interview feedback records accessible by the recruiter or the evaluated candidate."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/PushNotification" },
+      "description": "Personalized push notifications accessible by the recipient or sender."
+    }
+  }
+}
