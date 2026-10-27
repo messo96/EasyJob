@@ -1,0 +1,1 @@
+ /Users/giovannimessina/Desktop/IDEE/EasyJob/.dart_tool/flutter_build/aee762d0700a75d085eacd3380ed89f0/native_assets.json: 

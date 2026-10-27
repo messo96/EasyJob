@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1091567483148",
+    "project_id": "findmyjob-510711",
+    "storage_bucket": "findmyjob-510711.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1091567483148:android:885480c009ea0354b37129",
+        "android_client_info": {
+          "package_name": "com.findmyjob.find_my_job_flutter"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1091567483148-vdjt5flrlmjqoj9669b4apurm49lpo1k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5q0Z4z7XEPTXYYz-RprsxCc0LW4djylo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1091567483148-vdjt5flrlmjqoj9669b4apurm49lpo1k.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import '../firebase_options.dart';
 import '../models/job_models.dart';
 import 'workspace_meet_gmail_service.dart';
@@ -10,10 +11,40 @@ class FirestoreRecruitingService {
       WorkspaceMeetGmailService();
 
   FirestoreRecruitingService() {
-    _db = FirebaseFirestore.instanceFor(
-      app: Firebase.app(),
-      databaseId: DefaultFirebaseOptions.firestoreDatabaseId,
-    );
+    try {
+      _db = FirebaseFirestore.instanceFor(
+        app: Firebase.app(),
+        databaseId: DefaultFirebaseOptions.firestoreDatabaseId,
+      );
+    } catch (e) {
+      debugPrint('Firestore custom databaseId fallback to default: $e');
+      _db = FirebaseFirestore.instance;
+    }
+  }
+
+  /// Verifica la connessione effettiva a Firestore
+  Future<bool> verifyConnection() async {
+    try {
+      await _db.collection('jobs').limit(1).get();
+      return true;
+    } catch (e) {
+      debugPrint('Firestore connection test: $e');
+      return false;
+    }
+  }
+
+  /// Inizializza gli annunci di default se la collezione è vuota
+  Future<void> seedInitialJobsIfEmpty(List<JobOffer> initialJobs) async {
+    try {
+      final snap = await _db.collection('jobs').limit(1).get();
+      if (snap.docs.isEmpty) {
+        for (final job in initialJobs) {
+          await _db.collection('jobs').doc(job.id).set(job.toFirestoreCreateMap());
+        }
+      }
+    } catch (e) {
+      debugPrint('Seed initial jobs note: $e');
+    }
   }
 
   /// Stream in tempo reale di tutti gli annunci di lavoro pubblicati
@@ -21,6 +52,28 @@ class FirestoreRecruitingService {
     return _db.collection('jobs').snapshots().map(
           (snap) => snap.docs.map((d) => JobOffer.fromFirestore(d)).toList(),
         );
+  }
+
+  /// Stream in tempo reale delle candidature inviate
+  Stream<List<JobApplication>> watchApplications({String? candidateId}) {
+    Query<Map<String, dynamic>> query = _db.collection('applications');
+    if (candidateId != null && candidateId.isNotEmpty) {
+      query = query.where('candidateId', isEqualTo: candidateId);
+    }
+    return query.snapshots().map(
+          (snap) => snap.docs.map((d) => JobApplication.fromFirestore(d)).toList(),
+        );
+  }
+
+  /// Stream delle notifiche push per l'utente loggato
+  Stream<List<String>> watchPushNotifications(String userId) {
+    return _db
+        .collection('notifications')
+        .where('recipientId', isEqualTo: userId)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => '${d.data()['title']} — ${d.data()['body']}')
+            .toList());
   }
 
   /// Pubblica un nuovo annuncio e invia una notifica push per le nuove pubblicazioni
@@ -41,6 +94,19 @@ class FirestoreRecruitingService {
       relatedJobId: job.id,
       relatedApplicationId: '',
     );
+  }
+
+  /// Recupera il Curriculum Cloud su Firestore (`/resumes/{userId}`)
+  Future<CloudResume?> getCloudResume(String userId) async {
+    try {
+      final doc = await _db.collection('resumes').doc(userId).get();
+      if (doc.exists && doc.data() != null) {
+        return CloudResume.fromFirestore(doc);
+      }
+    } catch (e) {
+      debugPrint('Errore lettura CV Cloud: $e');
+    }
+    return null;
   }
 
   /// Salva o aggiorna il Curriculum Cloud su Firestore (`/resumes/{userId}`)

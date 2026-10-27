@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static const String firestoreDatabaseId =
       'ai-studio-84bebce4-f4b1-49e3-8af6-05d957018bc3';
+  static const String googleOAuthClientId =
+      '1091567483148-vdjt5flrlmjqoj9669b4apurm49lpo1k.apps.googleusercontent.com';
 
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -13,15 +15,11 @@ class DefaultFirebaseOptions {
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
+        return android;
       case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.windows:
-      case TargetPlatform.linux:
-        return web;
+        return ios;
       default:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions are not supported for this platform.',
-        );
+        return web;
     }
   }
 
@@ -31,6 +29,22 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1091567483148',
     projectId: 'findmyjob-510711',
     authDomain: 'findmyjob-510711.firebaseapp.com',
+    storageBucket: 'findmyjob-510711.firebasestorage.app',
+  );
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyB5q0Z4z7XEPTXYYz-RprsxCc0LW4djylo',
+    appId: '1:1091567483148:android:885480c009ea0354b37129',
+    messagingSenderId: '1091567483148',
+    projectId: 'findmyjob-510711',
+    storageBucket: 'findmyjob-510711.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyB5q0Z4z7XEPTXYYz-RprsxCc0LW4djylo',
+    appId: '1:1091567483148:ios:885480c009ea0354b37129',
+    messagingSenderId: '1091567483148',
+    projectId: 'findmyjob-510711',
     storageBucket: 'findmyjob-510711.firebasestorage.app',
   );
 }

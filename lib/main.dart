@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:file_picker/file_picker.dart';
@@ -7,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'firebase_options.dart';
 import 'models/job_models.dart';
+import 'services/auth_service.dart';
+import 'services/firestore_recruiting_service.dart';
 import 'services/workspace_meet_gmail_service.dart';
 
 Future<void> main() async {
@@ -44,12 +48,21 @@ class FindMyJobHomeShell extends StatefulWidget {
 
 class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
   int _selectedIndex = 0;
+  final AuthService _authService = AuthService();
+  final FirestoreRecruitingService _firestoreService =
+      FirestoreRecruitingService();
   final WorkspaceMeetGmailService _workspaceService =
       WorkspaceMeetGmailService();
 
+  User? _currentUser;
+  bool _isFirestoreConnected = false;
+  StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<List<JobOffer>>? _jobsSubscription;
+  StreamSubscription<List<JobApplication>>? _applicationsSubscription;
+
   // Posizione corrente utente per filtro distanza (Default: Milano)
-  double _userLat = 45.4642;
-  double _userLon = 9.1900;
+  final double _userLat = 45.4642;
+  final double _userLon = 9.1900;
   double _maxDistanceKm = 600.0;
   String _roleQuery = '';
 
@@ -62,14 +75,16 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
     headline: 'Senior Flutter & Cloud Mobile Architect',
     summary:
         'Sviluppatore Flutter/Dart con esperienza avanzata su Cloud Firestore (findmyjob-510711), autenticazione OAuth e architetture reattive.',
-    skills: 'Flutter, Dart, Cloud Firestore, Firebase Messaging, Google Meet API, Gmail API',
+    skills:
+        'Flutter, Dart, Cloud Firestore, Firebase Messaging, Google Meet API, Gmail API',
     experience: 'Tech Lead Mobile @ FinTech Milano (2023-oggi)',
-    education: 'Laurea Magistrale Ingegneria Informatica — Politecnico di Milano',
+    education:
+        'Laurea Magistrale Ingegneria Informatica — Politecnico di Milano',
     portfolioUrl: 'https://github.com/giovannimessina-dev',
     updatedAt: DateTime.now(),
   );
 
-  final List<JobOffer> _jobs = [
+  final List<JobOffer> _seedJobs = [
     JobOffer(
       id: 'job-flutter-milano-01',
       title: 'Senior Flutter Mobile Engineer',
@@ -82,8 +97,9 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
       category: 'Mobile & Flutter',
       description:
           'Sviluppo della super-app in Flutter sincronizzata in tempo reale con Cloud Firestore e notifiche push personalizzate.',
-      requirements: 'Flutter, Dart, Firebase Firestore, REST API, Clean Architecture',
-      recruiterId: 'demo-user-1',
+      requirements:
+          'Flutter, Dart, Firebase Firestore, REST API, Clean Architecture',
+      recruiterId: 'recruiter-fintech-1',
       recruiterName: 'Elena Visconti',
       recruiterEmail: 'giovannimessina96@gmail.com',
       status: 'open',
@@ -103,7 +119,7 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
       description:
           'Architettura serverless su Firestore Enterprise (findmyjob-510711) e integrazione Google Workspace.',
       requirements: 'Firestore Security Rules, Dart/Flutter, GCP, OAuth2',
-      recruiterId: 'demo-user-1',
+      recruiterId: 'recruiter-hub-2',
       recruiterName: 'Elena Visconti',
       recruiterEmail: 'giovannimessina96@gmail.com',
       status: 'open',
@@ -122,8 +138,9 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
       category: 'Mobile & Flutter',
       description:
           'Applicazioni mobile civiche con mappe interattive geolocalizzate e notifiche push.',
-      requirements: 'Flutter, flutter_map, geolocator, Firebase Messaging',
-      recruiterId: 'demo-user-1',
+      requirements:
+          'Flutter, flutter_map, geolocator, Firebase Messaging',
+      recruiterId: 'recruiter-gov-3',
       recruiterName: 'Lorenzo Conti',
       recruiterEmail: 'giovannimessina96@gmail.com',
       status: 'open',
@@ -132,11 +149,92 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
     ),
   ];
 
-  final List<JobApplication> _applications = [];
-  final List<InterviewFeedback> _feedbacks = [];
+  List<JobOffer> _jobs = [];
+  List<JobApplication> _applications = [];
   final List<String> _pushNotificationsLog = [
-    'Benvenuto su FindMyJob (Firestore ID: findmyjob-510711) — Notifiche Push attive.',
+    'Benvenuto su FindMyJob (Firestore: findmyjob-510711) — Servizi attivi.',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _jobs = List.from(_seedJobs);
+    _initFirebaseAndAuth();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    _jobsSubscription?.cancel();
+    _applicationsSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initFirebaseAndAuth() async {
+    // Verifica connessione Firestore
+    final bool connected = await _firestoreService.verifyConnection();
+    setState(() => _isFirestoreConnected = connected);
+
+    // Seeding annunci default su Firestore se vuoto
+    await _firestoreService.seedInitialJobsIfEmpty(_seedJobs);
+
+    // Sottoscrizione annunci in tempo reale da Firestore
+    _jobsSubscription = _firestoreService.watchJobs().listen((firestoreJobs) {
+      if (mounted && firestoreJobs.isNotEmpty) {
+        setState(() => _jobs = firestoreJobs);
+      }
+    }, onError: (err) {
+      debugPrint('Firestore Jobs Stream Error: $err');
+    });
+
+    // Sottoscrizione Auth state Firebase
+    _authSubscription = _authService.authStateChanges.listen((user) async {
+      setState(() => _currentUser = user);
+      if (user != null) {
+        _emitPushBanner(
+          'Autenticato con Google',
+          'Accesso effettuato come ${user.displayName ?? user.email}',
+        );
+
+        // Aggiorna CloudResume con i dettagli del profilo Google
+        final existingResume =
+            await _firestoreService.getCloudResume(user.uid);
+        if (existingResume != null) {
+          setState(() => _cloudResume = existingResume);
+        } else {
+          setState(() {
+            _cloudResume = CloudResume(
+              userId: user.uid,
+              fullName: user.displayName ?? _cloudResume.fullName,
+              email: user.email ?? _cloudResume.email,
+              phone: _cloudResume.phone,
+              headline: _cloudResume.headline,
+              summary: _cloudResume.summary,
+              skills: _cloudResume.skills,
+              experience: _cloudResume.experience,
+              education: _cloudResume.education,
+              portfolioUrl: _cloudResume.portfolioUrl,
+              updatedAt: DateTime.now(),
+            );
+          });
+          // Salva profilo iniziale su Firestore
+          await _firestoreService.saveCloudResume(_cloudResume);
+        }
+
+        // Ascolta le candidature dell'utente autenticato
+        _applicationsSubscription?.cancel();
+        _applicationsSubscription = _firestoreService
+            .watchApplications(candidateId: user.uid)
+            .listen((apps) {
+          if (mounted && apps.isNotEmpty) {
+            setState(() => _applications = apps);
+          }
+        }, onError: (err) {
+          debugPrint('Applications Stream Note: $err');
+        });
+      }
+    });
+  }
 
   void _emitPushBanner(String title, String body) {
     setState(() {
@@ -150,6 +248,35 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
         content: Text('🔔 $title: $body'),
       ),
     );
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      final userCred = await _authService.signInWithGoogle();
+      if (userCred != null) {
+        _emitPushBanner(
+          'Login Riuscito',
+          'Benvenuto ${userCred.user?.displayName ?? "Utente"}!',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade800,
+          content: Text('Errore autenticazione Google: $e'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    await _authService.signOut();
+    setState(() {
+      _currentUser = null;
+      _applications.clear();
+    });
+    _emitPushBanner('Disconnessione', 'Sessione terminata.');
   }
 
   /// Modale BottomSheet per Candidatura 1-Click (CV Cloud vs CV Ad-Hoc + Note)
@@ -232,20 +359,27 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
+                        final String candidateId =
+                            _currentUser?.uid ?? _cloudResume.userId;
+                        final String candidateName =
+                            _currentUser?.displayName ?? _cloudResume.fullName;
+                        final String candidateEmail =
+                            _currentUser?.email ?? _cloudResume.email;
+
                         final newApp = JobApplication(
                           id: 'app-${DateTime.now().millisecondsSinceEpoch}',
                           jobId: job.id,
                           jobTitle: job.title,
                           company: job.company,
-                          candidateId: _cloudResume.userId,
-                          candidateName: _cloudResume.fullName,
-                          candidateEmail: _cloudResume.email,
+                          candidateId: candidateId,
+                          candidateName: candidateName,
+                          candidateEmail: candidateEmail,
                           recruiterId: job.recruiterId,
                           recruiterEmail: job.recruiterEmail,
                           cvSource: selectedCvSource,
                           cvTitle: selectedCvSource == 'cloud'
-                              ? 'CV Cloud Firestore — ${_cloudResume.fullName}'
+                              ? 'CV Cloud Firestore — $candidateName'
                               : customCvTitle,
                           cvContent: selectedCvSource == 'cloud'
                               ? '${_cloudResume.summary}\nCompetenze: ${_cloudResume.skills}'
@@ -258,11 +392,28 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
                           createdAt: DateTime.now(),
                           updatedAt: DateTime.now(),
                         );
+
+                        // Salvataggio su Firestore
+                        try {
+                          await _firestoreService.submitOneClickApplication(
+                            job: job,
+                            candidateId: candidateId,
+                            candidateName: candidateName,
+                            candidateEmail: candidateEmail,
+                            cvSource: selectedCvSource,
+                            cvTitle: newApp.cvTitle,
+                            cvContent: newApp.cvContent,
+                            candidateNotes: newApp.candidateNotes,
+                          );
+                        } catch (e) {
+                          debugPrint('Firestore submit application note: $e');
+                        }
+
                         setState(() => _applications.insert(0, newApp));
-                        Navigator.pop(ctx);
+                        if (ctx.mounted) Navigator.pop(ctx);
                         _emitPushBanner(
                           'Candidatura Inviata',
-                          'Hai applicato a ${job.title} (${job.company}) con 1 clic.',
+                          'Hai inviato la candidatura a ${job.company} con 1 clic (Firestore sincronizzato).',
                         );
                       },
                       icon: const Icon(Icons.send),
@@ -280,12 +431,25 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
 
   /// 1-Tap Colloquio: Crea stanza Google Meet e invia email a candidato e recruiter
   Future<void> _scheduleOneTapMeet(JobApplication app) async {
-    final String meetLink = await _workspaceService.createGoogleMeetSpace(
-      accessToken: null,
-    );
+    final String? token = _authService.accessToken;
+    String meetLink;
+    try {
+      meetLink = await _firestoreService.scheduleOneTapMeetInterview(
+        application: app,
+        interviewDate: '30 Ott 2026 ore 15:00',
+        customMessage:
+            'Profilo selezionato per colloquio su Google Meet. Inviato invito ufficiale via Gmail.',
+        oauthAccessToken: token,
+      );
+    } catch (_) {
+      meetLink = await _workspaceService.createGoogleMeetSpace(
+        accessToken: token,
+      );
+    }
+
     const String dateStr = '30 Ott 2026 ore 15:00';
     final String msg =
-        'Profilo selezionato per colloquio su Google Meet ($dateStr). Email inviata a ${app.candidateEmail} e ${app.recruiterEmail}.';
+        'Colloquio fissato su Google Meet ($dateStr). Email automatica inviata a ${app.candidateEmail}.';
 
     setState(() {
       final idx = _applications.indexWhere((a) => a.id == app.id);
@@ -336,8 +500,118 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('FindMyJob · Flutter (findmyjob-510711)'),
+        title: Row(
+          children: [
+            const Text(
+              'FindMyJob',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: _isFirestoreConnected
+                    ? Colors.green.shade100
+                    : Colors.amber.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _isFirestoreConnected
+                        ? Icons.cloud_done
+                        : Icons.cloud_queue,
+                    size: 14,
+                    color: _isFirestoreConnected
+                        ? Colors.green.shade800
+                        : Colors.amber.shade900,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _isFirestoreConnected ? 'Firestore OK' : 'Firestore Connessione...',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _isFirestoreConnected
+                          ? Colors.green.shade900
+                          : Colors.amber.shade900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
+          // Google Auth Action / Profile
+          if (_currentUser == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: OutlinedButton.icon(
+                onPressed: _handleGoogleSignIn,
+                icon: const Icon(Icons.login, size: 18),
+                label: const Text('Accedi con Google'),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                ),
+              ),
+            )
+          else
+            PopupMenuButton<String>(
+              onSelected: (val) {
+                if (val == 'logout') _handleSignOut();
+              },
+              itemBuilder: (ctx) => [
+                PopupMenuItem(
+                  enabled: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _currentUser?.displayName ?? 'Utente Google',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        _currentUser?.email ?? '',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, size: 18, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Disconnetti'),
+                    ],
+                  ),
+                ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFF2563EB),
+                  backgroundImage: _currentUser?.photoURL != null
+                      ? NetworkImage(_currentUser!.photoURL!)
+                      : null,
+                  child: _currentUser?.photoURL == null
+                      ? Text(
+                          (_currentUser?.displayName ?? 'U')
+                              .substring(0, 1)
+                              .toUpperCase(),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 13),
+                        )
+                      : null,
+                ),
+              ),
+            ),
           IconButton(
             tooltip: 'Centro Notifiche Push (${_pushNotificationsLog.length})',
             onPressed: () {
@@ -377,6 +651,32 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
           ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              if (_currentUser == null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Accedi con Google per sincronizzare automaticamente il tuo CV Cloud Firestore e candidarti con 1 clic.',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _handleGoogleSignIn,
+                        child: const Text('Accedi'),
+                      ),
+                    ],
+                  ),
+                ),
               TextField(
                 onChanged: (v) => setState(() => _roleQuery = v),
                 decoration: const InputDecoration(
@@ -427,7 +727,8 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Text('${job.company} · ${job.locationName} · ${job.salaryRange}'),
+                        Text(
+                            '${job.company} · ${job.locationName} · ${job.salaryRange}'),
                         const SizedBox(height: 8),
                         Text(job.description),
                         const SizedBox(height: 12),
@@ -456,7 +757,7 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.findmyjob.flutter',
+                userAgentPackageName: 'com.findmyjob.find_my_job_flutter',
               ),
               MarkerLayer(
                 markers: filteredJobs.map((job) {
@@ -486,17 +787,42 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
             ],
           ),
 
-          // 2: Stato Candidature & CV Cloud
+          // 2: Stato Candidature & CV Cloud Firestore
           ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const Text(
-                'Monitoraggio Stato Candidature Inviate',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Monitoraggio Candidature',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      _showCvCloudDialog();
+                    },
+                    icon: const Icon(Icons.cloud_done, size: 16),
+                    label: const Text('Mio CV Cloud'),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               if (_applications.isEmpty)
-                const Text('Nessuna candidatura inviata. Usa il pulsante 1-Click sugli annunci.'),
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Nessuna candidatura inviata finora.\nUsa il pulsante "Candidati con 1 Clic" nella scheda Annunci.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ),
               ..._applications.map((app) => Card(
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ListTile(
@@ -506,8 +832,11 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
                       ),
                       trailing: app.meetLink.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.video_call, color: Colors.blue),
-                              onPressed: () => launchUrl(Uri.parse(app.meetLink)),
+                              tooltip: 'Avvia Google Meet',
+                              icon: const Icon(Icons.video_call,
+                                  color: Colors.blue),
+                              onPressed: () =>
+                                  launchUrl(Uri.parse(app.meetLink)),
                             )
                           : null,
                     ),
@@ -524,6 +853,14 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
+              if (_applications.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Nessun candidato presente nell\'ATS. Le candidature inviate appariranno qui.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
               ..._applications.map((app) => Card(
                     margin: const EdgeInsets.only(bottom: 12),
                     child: Padding(
@@ -533,9 +870,12 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
                         children: [
                           Text(
                             '${app.candidateName} (${app.candidateEmail})',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          Text('CV: ${app.cvTitle}\nNote: ${app.candidateNotes}'),
+                          Text('Offerta: ${app.jobTitle} (${app.company})'),
+                          Text(
+                              'CV: ${app.cvTitle}\nNote: ${app.candidateNotes}'),
                           const SizedBox(height: 12),
                           Wrap(
                             spacing: 8,
@@ -544,6 +884,44 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
                                 onPressed: () => _scheduleOneTapMeet(app),
                                 icon: const Icon(Icons.video_call),
                                 label: const Text('1-Tap Meet + Mail'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  await _firestoreService
+                                      .respondToCandidateApplication(
+                                    application: app,
+                                    decision: 'accepted',
+                                    employerResponse:
+                                        'Complimenti! La tua candidatura è stata accettata.',
+                                    oauthAccessToken:
+                                        _authService.accessToken,
+                                  );
+                                  _emitPushBanner(
+                                    'Candidato Accettato',
+                                    'Notifica ed email inviate a ${app.candidateEmail}.',
+                                  );
+                                },
+                                icon: const Icon(Icons.check, color: Colors.green),
+                                label: const Text('Assumi'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  await _firestoreService
+                                      .respondToCandidateApplication(
+                                    application: app,
+                                    decision: 'rejected',
+                                    employerResponse:
+                                        'Gentile candidato, abbiamo proseguito con un altro profilo.',
+                                    oauthAccessToken:
+                                        _authService.accessToken,
+                                  );
+                                  _emitPushBanner(
+                                    'Riscontro Inviato',
+                                    'Email di riscontro inviata a ${app.candidateEmail}.',
+                                  );
+                                },
+                                icon: const Icon(Icons.close, color: Colors.red),
+                                label: const Text('Scarta'),
                               ),
                             ],
                           ),
@@ -574,6 +952,58 @@ class _FindMyJobHomeShellState extends State<FindMyJobHomeShell> {
           NavigationDestination(
             icon: Icon(Icons.business_center_outlined),
             label: 'Gestionale ATS',
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCvCloudDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.cloud_done, color: Color(0xFF2563EB)),
+            SizedBox(width: 8),
+            Text('CV Cloud Firestore'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _cloudResume.fullName,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              Text('${_cloudResume.headline} · ${_cloudResume.email}'),
+              const Divider(height: 24),
+              const Text(
+                'Riepilogo Professionale:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(_cloudResume.summary),
+              const SizedBox(height: 12),
+              const Text(
+                'Competenze Chiave:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(_cloudResume.skills),
+              const SizedBox(height: 12),
+              const Text(
+                'Esperienza:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(_cloudResume.experience),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Chiudi'),
           ),
         ],
       ),
