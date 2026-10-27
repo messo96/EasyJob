@@ -100,17 +100,55 @@ class JobOffer {
   }
 }
 
+class CityLocation {
+  final String name;
+  final double latitude;
+  final double longitude;
+  final String region;
+
+  const CityLocation({
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    required this.region,
+  });
+}
+
+const List<CityLocation> kItalianCities = [
+  CityLocation(name: 'Milano', latitude: 45.4642, longitude: 9.1900, region: 'Lombardia'),
+  CityLocation(name: 'Roma', latitude: 41.9028, longitude: 12.4964, region: 'Lazio'),
+  CityLocation(name: 'Torino', latitude: 45.0703, longitude: 7.6869, region: 'Piemonte'),
+  CityLocation(name: 'Bologna', latitude: 44.4949, longitude: 11.3426, region: 'Emilia-Romagna'),
+  CityLocation(name: 'Firenze', latitude: 43.7696, longitude: 11.2558, region: 'Toscana'),
+  CityLocation(name: 'Napoli', latitude: 40.8518, longitude: 14.2681, region: 'Campania'),
+  CityLocation(name: 'Verona', latitude: 45.4384, longitude: 10.9916, region: 'Veneto'),
+  CityLocation(name: 'Genova', latitude: 44.4056, longitude: 8.9463, region: 'Liguria'),
+  CityLocation(name: 'Palermo', latitude: 38.1157, longitude: 13.3615, region: 'Sicilia'),
+  CityLocation(name: 'Bari', latitude: 41.1171, longitude: 16.8719, region: 'Puglia'),
+  CityLocation(name: 'Catania', latitude: 37.5079, longitude: 15.0830, region: 'Sicilia'),
+];
+
 class CloudResume {
   final String userId;
   final String fullName;
   final String email;
   final String phone;
+  final String birthDate;
+  final String locationCity;
+  final double userLat;
+  final double userLon;
+  final String photoUrl;
   final String headline;
   final String summary;
   final String skills;
   final String experience;
   final String education;
   final String portfolioUrl;
+  final String role; // 'candidate' | 'recruiter'
+  final String cvPdfName;
+  final String cvPdfPath;
+  final String cvPdfBase64;
+  final String cvPdfSize;
   final DateTime updatedAt;
 
   const CloudResume({
@@ -118,14 +156,72 @@ class CloudResume {
     required this.fullName,
     required this.email,
     required this.phone,
-    required this.headline,
-    required this.summary,
-    required this.skills,
-    required this.experience,
-    required this.education,
-    required this.portfolioUrl,
+    this.birthDate = '15/06/1996',
+    this.locationCity = 'Milano',
+    this.userLat = 45.4642,
+    this.userLon = 9.1900,
+    this.photoUrl = '',
+    this.role = 'candidate',
+    this.cvPdfName = '',
+    this.cvPdfPath = '',
+    this.cvPdfBase64 = '',
+    this.cvPdfSize = '',
+    this.headline = '',
+    this.summary = '',
+    this.skills = '',
+    this.experience = '',
+    this.education = '',
+    this.portfolioUrl = '',
     required this.updatedAt,
   });
+
+  CloudResume copyWith({
+    String? userId,
+    String? fullName,
+    String? email,
+    String? phone,
+    String? birthDate,
+    String? locationCity,
+    double? userLat,
+    double? userLon,
+    String? photoUrl,
+    String? role,
+    String? cvPdfName,
+    String? cvPdfPath,
+    String? cvPdfBase64,
+    String? cvPdfSize,
+    String? headline,
+    String? summary,
+    String? skills,
+    String? experience,
+    String? education,
+    String? portfolioUrl,
+    DateTime? updatedAt,
+  }) {
+    return CloudResume(
+      userId: userId ?? this.userId,
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      birthDate: birthDate ?? this.birthDate,
+      locationCity: locationCity ?? this.locationCity,
+      userLat: userLat ?? this.userLat,
+      userLon: userLon ?? this.userLon,
+      photoUrl: photoUrl ?? this.photoUrl,
+      role: role ?? this.role,
+      cvPdfName: cvPdfName ?? this.cvPdfName,
+      cvPdfPath: cvPdfPath ?? this.cvPdfPath,
+      cvPdfBase64: cvPdfBase64 ?? this.cvPdfBase64,
+      cvPdfSize: cvPdfSize ?? this.cvPdfSize,
+      headline: headline ?? this.headline,
+      summary: summary ?? this.summary,
+      skills: skills ?? this.skills,
+      experience: experience ?? this.experience,
+      education: education ?? this.education,
+      portfolioUrl: portfolioUrl ?? this.portfolioUrl,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 
   factory CloudResume.fromFirestore(
       DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -135,6 +231,16 @@ class CloudResume {
       fullName: data['fullName'] ?? '',
       email: data['email'] ?? '',
       phone: data['phone'] ?? '',
+      birthDate: data['birthDate'] ?? '15/06/1996',
+      locationCity: data['locationCity'] ?? 'Milano',
+      userLat: (data['userLat'] as num?)?.toDouble() ?? 45.4642,
+      userLon: (data['userLon'] as num?)?.toDouble() ?? 9.1900,
+      photoUrl: data['photoUrl'] ?? '',
+      role: data['role'] ?? 'candidate',
+      cvPdfName: data['cvPdfName'] ?? '',
+      cvPdfPath: data['cvPdfPath'] ?? '',
+      cvPdfBase64: data['cvPdfBase64'] ?? '',
+      cvPdfSize: data['cvPdfSize'] ?? '',
       headline: data['headline'] ?? '',
       summary: data['summary'] ?? '',
       skills: data['skills'] ?? '',
@@ -146,11 +252,24 @@ class CloudResume {
   }
 
   Map<String, dynamic> toFirestoreMap() {
+    // Salvaguardia: se il PDF supera i 650KB in base64, conserviamo i metadata (nome, path, dimensione)
+    // su Firestore per restare sempre ben al di sotto del limite rigido di 1MB per documento
+    final String safeBase64 = cvPdfBase64.length > 700000 ? '' : cvPdfBase64;
     return {
       'userId': userId,
       'fullName': fullName,
       'email': email,
       'phone': phone,
+      'birthDate': birthDate,
+      'locationCity': locationCity,
+      'userLat': userLat,
+      'userLon': userLon,
+      'photoUrl': photoUrl,
+      'role': role,
+      'cvPdfName': cvPdfName,
+      'cvPdfPath': cvPdfPath,
+      'cvPdfBase64': safeBase64,
+      'cvPdfSize': cvPdfSize,
       'headline': headline,
       'summary': summary,
       'skills': skills,
@@ -180,6 +299,8 @@ class JobApplication {
   final String employerResponse;
   final String meetLink;
   final String interviewDate;
+  final String interviewType; // 'remote' | 'in_person'
+  final String interviewLocation;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -201,6 +322,8 @@ class JobApplication {
     required this.employerResponse,
     required this.meetLink,
     required this.interviewDate,
+    this.interviewType = 'remote',
+    this.interviewLocation = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -208,6 +331,10 @@ class JobApplication {
   factory JobApplication.fromFirestore(
       DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
+    final meet = data['meetLink'] ?? '';
+    final loc = data['interviewLocation'] ?? meet;
+    final type = data['interviewType'] ??
+        (loc.toString().startsWith('http') ? 'remote' : 'in_person');
     return JobApplication(
       id: doc.id,
       jobId: data['jobId'] ?? '',
@@ -224,8 +351,10 @@ class JobApplication {
       candidateNotes: data['candidateNotes'] ?? '',
       status: data['status'] ?? 'in_review',
       employerResponse: data['employerResponse'] ?? '',
-      meetLink: data['meetLink'] ?? '',
+      meetLink: meet,
       interviewDate: data['interviewDate'] ?? '',
+      interviewType: type,
+      interviewLocation: loc,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );

@@ -33,8 +33,8 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyB5q0Z4z7XEPTXYYz-RprsxCc0LW4djylo',
-    appId: '1:1091567483148:android:885480c009ea0354b37129',
+    apiKey: 'AIzaSyDqkfgqQqu8qcSV4ZeBSRlVtiJcTuodZ_I',
+    appId: '1:1091567483148:android:6994b13c043266a5b37129',
     messagingSenderId: '1091567483148',
     projectId: 'findmyjob-510711',
     storageBucket: 'findmyjob-510711.firebasestorage.app',

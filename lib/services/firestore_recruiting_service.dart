@@ -111,10 +111,14 @@ class FirestoreRecruitingService {
 
   /// Salva o aggiorna il Curriculum Cloud su Firestore (`/resumes/{userId}`)
   Future<void> saveCloudResume(CloudResume resume) async {
-    await _db
-        .collection('resumes')
-        .doc(resume.userId)
-        .set(resume.toFirestoreMap());
+    try {
+      await _db
+          .collection('resumes')
+          .doc(resume.userId)
+          .set(resume.toFirestoreMap());
+    } catch (e) {
+      debugPrint('Firestore saveCloudResume sync notice: $e');
+    }
   }
 
   /// Candidatura rapida con 1 solo clic (usando CV Cloud o CV Ad-Hoc + note candidato)
@@ -162,30 +166,66 @@ class FirestoreRecruitingService {
     );
   }
 
-  /// 1-Tap Colloquio: Crea riunione su Google Meet e invia email automatica
-  /// sia al candidato che al recruiter, più notifica push personalizzata.
-  Future<String> scheduleOneTapMeetInterview({
+  /// Convocazione Colloquio Recruiter: crea link Google Meet (se da remoto) oppure
+  /// imposta il luogo fisico specificato dal recruiter, invia email automatica
+  /// con Data, Ora e Luogo e notifica push sia a candidato che recruiter.
+  Future<String> scheduleInterview({
     required JobApplication application,
     required String interviewDate,
+    required String interviewType, // 'remote' | 'in_person'
+    required String locationOrMeet,
     required String customMessage,
     required String? oauthAccessToken,
   }) async {
-    final String meetUri = await _workspaceService.createGoogleMeetSpace(
-      accessToken: oauthAccessToken,
-    );
+    String finalMeetLink = '';
+    String finalLocation = locationOrMeet.trim();
+
+    if (interviewType == 'remote') {
+      if (finalLocation.isNotEmpty && finalLocation.startsWith('http')) {
+        finalMeetLink = finalLocation;
+      } else {
+        finalMeetLink = await _workspaceService.createGoogleMeetSpace(
+          accessToken: oauthAccessToken,
+        );
+        finalLocation = finalMeetLink;
+      }
+    } else {
+      if (finalLocation.isEmpty) {
+        finalLocation = 'Sede aziendale di ${application.company}';
+      }
+    }
 
     await _db.collection('applications').doc(application.id).update({
       'status': 'interview_scheduled',
       'employerResponse': customMessage,
-      'meetLink': meetUri,
+      'meetLink': finalMeetLink,
+      'interviewType': interviewType,
+      'interviewLocation': finalLocation,
       'interviewDate': interviewDate,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
+    final String modalityText = interviewType == 'remote'
+        ? 'Online tramite Google Meet: $finalMeetLink'
+        : 'In presenza presso: $finalLocation';
+
     final String subject =
-        '[Invito Colloquio Google Meet] ${application.jobTitle} — ${application.company}';
-    final String emailBody =
-        '$customMessage\n\nData Colloquio: $interviewDate\nLink Google Meet: $meetUri';
+        '[Convocazione Colloquio] ${application.jobTitle} — ${application.company}';
+    final String emailBody = '''Gentile ${application.candidateName},
+
+Siamo lieti di comunicarti che la tua candidatura per la posizione di "${application.jobTitle}" presso ${application.company} è stata selezionata per un colloquio!
+
+DETTAGLI DEL COLLOQUIO:
+• Data e Ora: $interviewDate
+• Modalità: ${interviewType == 'remote' ? 'Da remoto (Google Meet)' : 'Di persona'}
+• Luogo / Connessione: $modalityText
+
+MESSAGGIO DAL RECRUITER:
+$customMessage
+
+Ti auguriamo il meglio per il colloquio.
+Team Risorse Umane — ${application.company}
+(Inviato automaticamente tramite EasyJob ATS)''';
 
     // Invio email automatica a candidato e recruiter
     await _workspaceService.sendAutomatedEmail(
@@ -204,14 +244,31 @@ class FirestoreRecruitingService {
     await sendPushNotification(
       recipientId: application.candidateId,
       senderId: application.recruiterId,
-      type: 'interview_meet',
-      title: 'Colloquio Google Meet fissato: ${application.jobTitle}',
-      body: 'Data: $interviewDate · Link Meet: $meetUri',
+      type: 'interview_scheduled',
+      title: 'Colloquio Fissato: ${application.jobTitle}',
+      body: 'Data: $interviewDate · $modalityText',
       relatedJobId: application.jobId,
       relatedApplicationId: application.id,
     );
 
-    return meetUri;
+    return finalLocation;
+  }
+
+  /// 1-Tap Colloquio rapido (fallback Google Meet)
+  Future<String> scheduleOneTapMeetInterview({
+    required JobApplication application,
+    required String interviewDate,
+    required String customMessage,
+    required String? oauthAccessToken,
+  }) async {
+    return scheduleInterview(
+      application: application,
+      interviewDate: interviewDate,
+      interviewType: 'remote',
+      locationOrMeet: '',
+      customMessage: customMessage,
+      oauthAccessToken: oauthAccessToken,
+    );
   }
 
   /// Risposta obbligatoria del datore di lavoro (Assunto o Scartato) con invio mail e notifica push

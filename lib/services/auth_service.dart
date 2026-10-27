@@ -9,12 +9,10 @@ class AuthService {
   AuthService._internal();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // Usa esclusivamente lo scope standard per evitare blocchi OAuth/Google Play Services su Android
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: [
-      'email',
-      'https://www.googleapis.com/auth/gmail.send',
-      'https://www.googleapis.com/auth/meetings.space.created',
-    ],
+    scopes: ['email'],
     serverClientId: DefaultFirebaseOptions.googleOAuthClientId,
   );
 
@@ -45,6 +43,17 @@ class AuthService {
       return userCredential;
     } catch (e) {
       debugPrint('Google Sign-In Error: $e');
+      rethrow;
+    }
+  }
+
+  /// Effettua l'accesso anonimo con Firebase Auth (fallback se Google Sign-In fallisce per SHA-1)
+  Future<UserCredential?> signInAnonymously() async {
+    try {
+      final cred = await _auth.signInAnonymously();
+      return cred;
+    } catch (e) {
+      debugPrint('Anonymous Auth Error: $e');
       rethrow;
     }
   }

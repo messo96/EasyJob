@@ -7,12 +7,20 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1091567483148:android:885480c009ea0354b37129",
+        "mobilesdk_app_id": "1:1091567483148:android:6994b13c043266a5b37129",
         "android_client_info": {
-          "package_name": "com.findmyjob.find_my_job_flutter"
+          "package_name": "com.findmyjob.find_my_job"
         }
       },
       "oauth_client": [
+        {
+          "client_id": "1091567483148-gr33qmbsc2n1rff6ghhhan0264q7kjgt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.findmyjob.find_my_job",
+            "certificate_hash": "9a48bab6e6befab0f016888b504e2c780ec9308a"
+          }
+        },
         {
           "client_id": "1091567483148-vdjt5flrlmjqoj9669b4apurm49lpo1k.apps.googleusercontent.com",
           "client_type": 3
@@ -20,7 +28,7 @@
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyB5q0Z4z7XEPTXYYz-RprsxCc0LW4djylo"
+          "current_key": "AIzaSyDqkfgqQqu8qcSV4ZeBSRlVtiJcTuodZ_I"
         }
       ],
       "services": {
@@ -29,6 +37,13 @@
             {
               "client_id": "1091567483148-vdjt5flrlmjqoj9669b4apurm49lpo1k.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "1091567483148-p0b0u9f79723vncug0jqik7rglropiqc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.findmyjob.findMyJob"
+              }
             }
           ]
         }
